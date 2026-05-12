@@ -1,0 +1,161 @@
+name: Build mpv runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      mpv_tag:
+        description: Official mpv release tag, for example v0.41.0
+        required: true
+        type: string
+      create_release:
+        description: Create or update a GitHub Release with the runtime artifacts
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            archive: tar.gz
+            build_script: scripts/build-linux.sh
+          - target: aarch64-apple-darwin
+            os: macos-14
+            archive: tar.gz
+            build_script: scripts/build-macos.sh
+          - target: x86_64-apple-darwin
+            os: macos-13
+            archive: tar.gz
+            build_script: scripts/build-macos.sh
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
+            archive: zip
+            build_script: scripts/build-windows-msys2.sh
+
+    steps:
+      - name: Checkout runtime repo
+        uses: actions/checkout@v4
+
+      - name: Checkout mpv
+        uses: actions/checkout@v4
+        with:
+          repository: mpv-player/mpv
+          ref: ${{ inputs.mpv_tag }}
+          path: mpv
+          submodules: recursive
+
+      - name: Set up MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-cc
+            mingw-w64-x86_64-meson
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-ffmpeg
+            mingw-w64-x86_64-libass
+            mingw-w64-x86_64-libplacebo
+            mingw-w64-x86_64-luajit
+            mingw-w64-x86_64-vulkan-headers
+            mingw-w64-x86_64-dlfcn
+
+      - name: Build mpv
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x "${{ matrix.build_script }}"
+          "${{ matrix.build_script }}" "${{ matrix.target }}" "${{ github.workspace }}/mpv"
+
+      - name: Build mpv on Windows
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          chmod +x "${{ matrix.build_script }}"
+          "${{ matrix.build_script }}" "${{ matrix.target }}" "${{ github.workspace }}/mpv"
+
+      - name: Create Windows MSVC import library
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/create-msvc-import-lib.ps1 `
+            -Target "${{ matrix.target }}" `
+            -StageDir "${{ github.workspace }}/stage/${{ matrix.target }}"
+
+      - name: Package runtime
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          node scripts/package-runtime.mjs \
+            --target "${{ matrix.target }}" \
+            --mpv-tag "${{ inputs.mpv_tag }}" \
+            --archive "${{ matrix.archive }}"
+
+      - name: Package runtime on Windows
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          node scripts/package-runtime.mjs \
+            --target "${{ matrix.target }}" \
+            --mpv-tag "${{ inputs.mpv_tag }}" \
+            --archive "${{ matrix.archive }}"
+
+      - name: Verify runtime package
+        shell: bash
+        run: |
+          node scripts/verify-runtime.mjs --target "${{ matrix.target }}"
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-mpv-runtime-${{ matrix.target }}
+          path: dist/nexus-mpv-runtime-${{ matrix.target }}.${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Release artifacts
+    needs: build
+    if: inputs.create_release
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download runtime artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: nexus-mpv-runtime-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum nexus-mpv-runtime-* > checksums.sha256
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nexus-mpv-runtime-${{ inputs.mpv_tag }}
+          name: Nexus mpv runtime ${{ inputs.mpv_tag }}
+          body: |
+            Nexus mpv runtime artifacts built from mpv ${{ inputs.mpv_tag }}.
+
+            Unpack artifacts from the Nexus app repository root.
+          files: |
+            dist/nexus-mpv-runtime-*
+            dist/checksums.sha256
+          fail_on_unmatched_files: true

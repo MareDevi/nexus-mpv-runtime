@@ -1,0 +1,10 @@
+{
+	"name": "nexus-mpv-runtime",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"package-runtime": "node scripts/package-runtime.mjs",
+		"verify-runtime": "node scripts/verify-runtime.mjs"
+	}
+}
