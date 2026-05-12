@@ -62,7 +62,20 @@ const archivePath = join(distDir, archiveName);
 rmSync(archivePath, { force: true });
 
 if (archive === "zip") {
-	run("7z", ["a", "-tzip", archivePath, "src-tauri"], outputRoot);
+	const sevenZip = [
+		"C:\\Program Files\\7-Zip\\7z.exe",
+		"C:\\Program Files (x86)\\7-Zip\\7z.exe",
+	].find((p) => existsSync(p));
+
+	if (sevenZip) {
+		run(sevenZip, ["a", "-tzip", archivePath, "src-tauri"], outputRoot);
+	} else {
+		run("powershell.exe", [
+			"-NoProfile",
+			"-Command",
+			`Compress-Archive -Path '${join(outputRoot, "src-tauri")}' -DestinationPath '${archivePath}'`,
+		]);
+	}
 } else if (archive === "tar.gz") {
 	run("tar", ["-czf", archivePath, "src-tauri"], outputRoot);
 } else {
@@ -319,6 +332,12 @@ function run(command, args, cwd = repoRoot) {
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "pipe"],
 	});
+
+	if (result.error) {
+		throw new Error(
+			`${command} ${args.join(" ")} failed: ${result.error.message}`,
+		);
+	}
 
 	if (result.status !== 0) {
 		throw new Error(`${command} ${args.join(" ")} failed:\n${result.stderr}`);
