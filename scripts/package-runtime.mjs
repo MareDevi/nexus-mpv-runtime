@@ -37,6 +37,10 @@ mkdirSync(distDir, { recursive: true });
 
 const copied = collectRuntimeFiles(target, stageDir, nexusRuntimeDir);
 
+if (target.includes("linux")) {
+	fixLinuxRpath(nexusRuntimeDir);
+}
+
 if (copied.length === 0) {
 	throw new Error(`No runtime files collected for ${target} from ${stageDir}`);
 }
@@ -300,6 +304,15 @@ function dllDependencies(file) {
 	}
 
 	return [...new Set(dependencies)];
+}
+
+function fixLinuxRpath(destinationRoot) {
+	for (const file of walk(destinationRoot)) {
+		if (basename(file).includes(".so")) {
+			console.log(`Setting RPATH for ${file}`);
+			run("patchelf", ["--set-rpath", "$ORIGIN", file]);
+		}
+	}
 }
 
 function shouldSkipLinuxDependency(file) {

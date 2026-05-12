@@ -40,6 +40,7 @@ sudo apt-get install -y --no-install-recommends \
   libxv-dev \
   meson \
   ninja-build \
+  patchelf \
   pkg-config \
   python3 \
   wayland-protocols
