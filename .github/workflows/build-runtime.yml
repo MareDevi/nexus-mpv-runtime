@@ -72,6 +72,7 @@ jobs:
             mingw-w64-x86_64-luajit
             mingw-w64-x86_64-vulkan-headers
             mingw-w64-x86_64-dlfcn
+            mingw-w64-x86_64-nodejs
 
       - name: Build mpv
         if: runner.os != 'Windows'
