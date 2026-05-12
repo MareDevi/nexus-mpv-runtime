@@ -166,6 +166,11 @@ function collectWindows(sourceRoot, destinationRoot) {
 	}
 
 	for (const dependency of dllDependencies(mpvDll)) {
+		if (!existsSync(dependency)) {
+			console.warn(`Warning: skipping missing dependency ${dependency}`);
+			continue;
+		}
+
 		copyAs(
 			dependency,
 			destinationRoot,
@@ -270,7 +275,14 @@ function dllDependencies(file) {
 	for (const line of output.split("\n")) {
 		const match = line.match(/=>\s+(\/\S+)/);
 		if (match?.[1]?.toLowerCase().includes("/mingw64/bin/")) {
-			dependencies.push(match[1]);
+			const msysPath = match[1];
+			let winPath = msysPath;
+			try {
+				winPath = run("cygpath", ["-w", msysPath]).stdout.trim();
+			} catch {
+				// cygpath not available, keep original path
+			}
+			dependencies.push(winPath);
 		}
 	}
 

@@ -32,10 +32,6 @@ jobs:
             os: macos-14
             archive: tar.gz
             build_script: scripts/build-macos.sh
-          - target: x86_64-apple-darwin
-            os: macos-13
-            archive: tar.gz
-            build_script: scripts/build-macos.sh
           - target: x86_64-pc-windows-msvc
             os: windows-2022
             archive: zip
